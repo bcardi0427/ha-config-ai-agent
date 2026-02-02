@@ -3,12 +3,6 @@
 This module provides native Gemini API support using direct HTTP requests,
 which is required for proper function calling with Gemini 3 models that
 use the thought_signature mechanism.
-
-Gemini 3+ enforces thought_signature pass-through:
-1. When Gemini returns a response, it may include a thought_signature in any part.
-2. For parallel tool calls, the signature is only on the FIRST part.
-3. We MUST echo these signatures back exactly in the history.
-4. Parallel function responses MUST be grouped together (not interleaved).
 """
 
 import json
@@ -22,7 +16,7 @@ GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 class GeminiClient:
-    """Native Gemini API client with proper thought_signature handling for Gemini 3+."""
+    """Native Gemini API client with fixed role/signature schema for Gemini 3+."""
 
     def __init__(
         self,
@@ -32,15 +26,16 @@ class GeminiClient:
     ):
         """Initialize the Gemini client."""
         self.api_key = api_key
-        self.model = model
+        # Clean model name (remove provider prefix)
+        self.model = model.split('/')[-1] if '/' in model else model
         self.temperature = temperature
-        self.endpoint = f"{GEMINI_API_BASE}/models/{model}:generateContent"
-        self.stream_endpoint = f"{GEMINI_API_BASE}/models/{model}:streamGenerateContent"
+        self.endpoint = f"{GEMINI_API_BASE}/models/{self.model}:generateContent"
+        self.stream_endpoint = f"{GEMINI_API_BASE}/models/{self.model}:streamGenerateContent"
         
-        logger.info(f"Initialized native Gemini client with model: {model}")
+        logger.info(f"Initialized native Gemini client for {self.model}")
 
     def _build_tools(self, tool_definitions: List[Dict]) -> List[Dict]:
-        """Convert OpenAI-style tool definitions to Gemini format."""
+        """Convert OpenAI tools to Gemini format."""
         function_declarations = []
         for tool in tool_definitions:
             if tool.get("type") == "function":
@@ -53,54 +48,38 @@ class GeminiClient:
         return [{"functionDeclarations": function_declarations}]
 
     def _msg_to_parts(self, msg: Dict) -> List[Dict]:
-        """Convert a single OpenAI-style message into one or more Gemini parts."""
+        """Convert message components to Gemini Parts."""
         parts = []
         role = msg.get("role")
         content = msg.get("content")
 
-        # 1. Handle Text Content
+        # 1. Text
         if content:
             if isinstance(content, str):
-                part = {"text": content}
-                # Preserve thoughtSignature for text parts (sibling)
-                thought_sig = msg.get("thought_signature") or msg.get("thoughtSignature")
-                if thought_sig:
-                    part["thoughtSignature"] = thought_sig
-                parts.append(part)
+                parts.append({"text": content})
             elif isinstance(content, list):
                 for item in content:
                     if isinstance(item, dict) and item.get("type") == "text":
-                        part = {"text": item.get("text", "")}
-                        thought_sig = msg.get("thought_signature") or msg.get("thoughtSignature")
-                        if thought_sig:
-                             part["thoughtSignature"] = thought_sig
-                        parts.append(part)
+                        parts.append({"text": item.get("text", "")})
 
-        # 2. Handle Function Calls (Assistant Role)
+        # 2. Assistant Function Calls
         if role == "assistant" and "tool_calls" in msg:
-            for i, tc in enumerate(msg.get("tool_calls", [])):
+            for tc in msg.get("tool_calls", []):
                 func = tc.get("function", {})
                 args_str = func.get("arguments", "{}")
                 try:
                     args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except json.JSONDecodeError:
+                except:
                     args = {}
                 
-                fc_part = {
+                parts.append({
                     "functionCall": {
                         "name": func.get("name", ""),
                         "args": args
                     }
-                }
-                
-                # Echo thoughtSignature as a SIBLING to functionCall (required)
-                thought_sig = tc.get("thought_signature") or tc.get("thoughtSignature")
-                if thought_sig:
-                    fc_part["thoughtSignature"] = thought_sig
-                
-                parts.append(fc_part)
+                })
 
-        # 3. Handle Function Responses (Tool Role)
+        # 3. Tool Responses (Results)
         if role == "tool":
             func_name = msg.get("function_name")
             if not func_name:
@@ -110,10 +89,9 @@ class GeminiClient:
             content_str = msg.get("content", "{}")
             try:
                 response_data = json.loads(content_str) if isinstance(content_str, str) else content_str
-            except json.JSONDecodeError:
+            except:
                 response_data = {"result": content_str}
             
-            # Use standard functionResponse structure
             parts.append({
                 "functionResponse": {
                     "name": func_name,
@@ -124,30 +102,47 @@ class GeminiClient:
         return parts
 
     def _build_contents(self, messages: List[Dict]) -> List[Dict]:
-        """Convert OpenAI messages to Gemini format with role grouping."""
+        """Group into alternating user/model content blocks with signatures at the TOP level."""
         contents = []
-        last_role = None
-        current_content = None
-
+        
         for msg in messages:
             role = msg.get("role", "user")
-            
             if role == "system": continue
             
-            # Map roles: system/user -> user, assistant -> model, tool -> function
-            gemini_role = "model" if role == "assistant" else ("function" if role == "tool" else "user")
-
-            # Gemini requires alternating roles (user/model). 
-            # Sequential 'function' roles MUST be grouped into a single content block.
-            if current_content and gemini_role == last_role:
-                parts = self._msg_to_parts(msg)
-                current_content["parts"].extend(parts)
+            # CRITICAL: Gemini 3 only allows 'user' or 'model'. 
+            # Tool results are sent as a 'user' turn.
+            gemini_role = "model" if role == "assistant" else "user"
+            
+            parts = self._msg_to_parts(msg)
+            if not parts: continue
+            
+            content_block = {
+                "role": gemini_role,
+                "parts": parts
+            }
+            
+            # CRITICAL: signature belongs to the CONTENT object, not parts
+            # Check tool_calls for signatures if role == model
+            thought_sig = None
+            if role == "assistant" and "tool_calls" in msg:
+                for tc in msg.get("tool_calls", []):
+                    if tc.get("thought_signature"):
+                        thought_sig = tc["thought_signature"]
+                        break
+            
+            # Check message level signature (text reasoning)
+            if not thought_sig:
+                thought_sig = msg.get("thought_signature") or msg.get("thoughtSignature")
+                
+            if thought_sig:
+                content_block["thoughtSignature"] = thought_sig
+                
+            # If the last block has the same role, try to merge parts (required for parallel results)
+            if contents and contents[-1]["role"] == gemini_role:
+                contents[-1]["parts"].extend(parts)
+                # Keep original signature if it was already set
             else:
-                parts = self._msg_to_parts(msg)
-                if parts:
-                    current_content = {"role": gemini_role, "parts": parts}
-                    contents.append(current_content)
-                    last_role = gemini_role
+                contents.append(content_block)
         
         return contents
 
@@ -156,7 +151,7 @@ class GeminiClient:
         messages: List[Dict],
         tools: List[Dict],
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Streaming generator that handles Gemini 3's strict signature requirements."""
+        """Streaming with strictly fixed Gemini 3 schema."""
         try:
             contents = self._build_contents(messages)
             request_body = {
@@ -164,29 +159,29 @@ class GeminiClient:
                 "tools": self._build_tools(tools)
             }
             
-            # Add system instruction if present
+            # System instruction
             for msg in messages:
                 if msg.get("role") == "system":
-                    request_body["systemInstruction"] = {"parts": [{"text": msg.get("content", "")}]}
+                    request_body["systemInstruction"] = {"parts": [{"text": msg.get("content", " ")}]}
                     break
 
             if self.temperature is not None:
                 request_body["generationConfig"] = {"temperature": self.temperature}
             
             url = f"{self.stream_endpoint}?key={self.api_key}&alt=sse"
-            logger.info(f"[GEMINI] Calling {self.model}")
+            logger.debug(f"[GEMINI] Native Request: {json.dumps(request_body)[:500]}...")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=request_body) as response:
                     if response.status != 200:
                         err = await response.text()
-                        logger.error(f"[GEMINI] API Error {response.status}: {err}")
-                        yield {"type": "error", "error": f"API Error {response.status}: {err[:500]}"}
+                        logger.error(f"[GEMINI] Status {response.status}: {err}")
+                        yield {"type": "error", "error": f"API {response.status}: {err}"}
                         return
                     
                     accum_text = ""
                     accum_tool_calls = []
-                    msg_thought_sig = None  # Signature for the overall message/text
+                    msg_thought_sig = None
                     
                     async for line in response.content:
                         line = line.decode('utf-8').strip()
@@ -195,19 +190,20 @@ class GeminiClient:
                         try:
                             chunk = json.loads(line[6:])
                             for candidate in chunk.get("candidates", []):
+                                # Capture top-level signature from Content or Candidate
                                 content_obj = candidate.get("content", {})
+                                sig = content_obj.get("thoughtSignature") or content_obj.get("thought_signature")
+                                if sig: msg_thought_sig = sig
+                                
                                 for part in content_obj.get("parts", []):
-                                    # Capture signatures from ANY part
-                                    # Gemini uses 'thoughtSignature' (camelCase) in native API
-                                    sig = part.get("thoughtSignature") or part.get("thought_signature")
-                                    if sig:
-                                        msg_thought_sig = sig
-                                        logger.debug(f"[GEMINI] Captured thoughtSignature: {sig[:20]}...")
+                                    # Signature might also be in a part (fallback)
+                                    part_sig = part.get("thoughtSignature") or part.get("thought_signature")
+                                    if part_sig: msg_thought_sig = part_sig
                                     
                                     if "text" in part:
-                                        text = part["text"]
-                                        accum_text += text
-                                        yield {"type": "content", "content": text}
+                                        t = part["text"]
+                                        accum_text += t
+                                        yield {"type": "content", "content": t}
                                     
                                     if "functionCall" in part:
                                         fc = part["functionCall"]
@@ -219,7 +215,9 @@ class GeminiClient:
                                                 "arguments": json.dumps(fc.get("args", {}))
                                             }
                                         }
-                                        if sig: tc["thought_signature"] = sig
+                                        # Use the signature found so far
+                                        if msg_thought_sig:
+                                            tc["thought_signature"] = msg_thought_sig
                                         accum_tool_calls.append(tc)
                                         yield {"type": "tool_call", "tool_call": tc}
                             
@@ -232,37 +230,32 @@ class GeminiClient:
                                     "thought_signature": msg_thought_sig,
                                     "usage": {
                                         "prompt_tokens": usage.get("promptTokenCount", 0),
-                                        "completion_tokens": usage.get("candidatesTokenCount", 0),
                                         "total_tokens": usage.get("totalTokenCount", 0),
                                     },
                                     "finish_reason": "tool_calls" if accum_tool_calls else "stop"
                                 }
-                        except Exception as e:
-                            logger.debug(f"[GEMINI] Chunk parse error: {e}")
+                        except:
+                            continue
             
         except Exception as e:
-            logger.error(f"[GEMINI] Stream error: {e}", exc_info=True)
+            logger.error(f"[GEMINI] Critical: {e}", exc_info=True)
             yield {"type": "error", "error": str(e)}
 
     async def generate_content(self, messages: List[Dict], tools: List[Dict]) -> Dict[str, Any]:
-        result = {"content": "", "tool_calls": [], "usage": {}, "thought_signature": None}
+        result = {"content": "", "tool_calls": [], "usage": {}}
         async for event in self.generate_content_stream(messages, tools):
             if event["type"] == "content": result["content"] += event["content"]
             elif event["type"] == "tool_call": result["tool_calls"].append(event["tool_call"])
             elif event["type"] == "complete":
-                result.update({
-                    "usage": event["usage"],
-                    "thought_signature": event.get("thought_signature"),
-                    "finish_reason": event["finish_reason"]
-                })
+                result.update({"usage": event["usage"], "thought_signature": event.get("thought_signature")})
         return result
 
 
 def is_gemini_model(model: str) -> bool:
-    model_part = model.split('/')[-1] if '/' in model else model
-    return model_part.startswith("gemini-")
+    m = model.split('/')[-1] if '/' in model else model
+    return m.startswith("gemini-")
 
 
 def is_gemini_3_model(model: str) -> bool:
-    model_part = model.split('/')[-1] if '/' in model else model
-    return any(model_part.startswith(p) for p in ["gemini-3", "gemini-4", "gemini-5"])
+    m = model.split('/')[-1] if '/' in model else model
+    return any(m.startswith(p) for p in ["gemini-3", "gemini-4", "gemini-5"])
