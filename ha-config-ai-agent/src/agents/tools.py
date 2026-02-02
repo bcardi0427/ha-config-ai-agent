@@ -520,11 +520,38 @@ class AgentTools:
 
             logger.info(f"Agent found {len(files)} files (searched {len(matched_paths)} YAML files + 3 virtual files)")
 
+            # Limit results to prevent API overload
+            MAX_FILES = 50
+            MAX_CONTENT_LENGTH = 2000  # Characters per file
+            
+            # Sort by match count (highest first) if search pattern was used
+            if search_pattern and not is_file_path_pattern:
+                files.sort(key=lambda x: x.get("matches", 0), reverse=True)
+            
+            # Track if we truncated results
+            total_found = len(files)
+            truncated = total_found > MAX_FILES
+            
+            if truncated:
+                files = files[:MAX_FILES]
+                logger.info(f"Limited results to {MAX_FILES} files (out of {total_found})")
+            
+            # Truncate content for each file to prevent oversized responses
+            for f in files:
+                content = f.get("content", "")
+                if len(content) > MAX_CONTENT_LENGTH:
+                    f["content"] = content[:MAX_CONTENT_LENGTH] + f"\n\n... [truncated - {len(content)} total chars]"
+                    f["truncated"] = True
+
             result = {
                 "success": True,
                 "files": files,
-                "count": len(files)
+                "count": len(files),
+                "total_found": total_found if truncated else len(files)
             }
+            
+            if truncated:
+                result["note"] = f"Results limited to {MAX_FILES} most relevant files. Use a more specific search pattern to narrow results."
 
             if search_pattern:
                 result["search_pattern"] = search_pattern
