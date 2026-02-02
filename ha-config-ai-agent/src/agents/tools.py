@@ -1077,3 +1077,43 @@ class AgentTools:
         except Exception as e:
             return {"error": f"Git rollback failed: {str(e)}", "success": False}
 
+    async def get_system_info(self) -> Dict[str, Any]:
+        """
+        Get info about the Home Assistant environment.
+        Returns version, installed components (integrations), unit system, and time zone.
+        Use this to ensure proposed automations are compatible with the current environment.
+        """
+        try:
+            # Custom component mode
+            if self.config_manager.hass:
+                hass = self.config_manager.hass
+                return {
+                    "version": hass.config.version,
+                    "components": list(hass.config.components),
+                    "unit_system": hass.config.units.as_dict(),
+                    "time_zone": hass.config.time_zone,
+                    "external_url": hass.config.external_url,
+                    "internal_url": hass.config.internal_url
+                }
+
+            # Add-on mode
+            from ..ha.ha_websocket import HomeAssistantWebSocket
+            supervisor_token = os.getenv('SUPERVISOR_TOKEN')
+            if not supervisor_token:
+                return {"error": "No API access"}
+            
+            ws_client = HomeAssistantWebSocket("ws://supervisor/core/websocket", supervisor_token)
+            await ws_client.connect()
+            config = await ws_client.get_config()
+            await ws_client.close()
+            
+            return {
+                "version": config.get("version"),
+                "components": config.get("components"),
+                "unit_system": config.get("unit_system"),
+                "time_zone": config.get("time_zone"),
+                "location_name": config.get("location_name")
+            }
+        except Exception as e:
+            return {"error": str(e)}
+

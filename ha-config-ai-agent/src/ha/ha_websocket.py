@@ -475,6 +475,18 @@ class HomeAssistantWebSocket:
             logger.error(f"Config check failed: {e}")
             raise
 
+    async def get_config(self) -> Dict[str, Any]:
+        """
+        Get Home Assistant configuration/system info.
+        Returns version, components, unit system, etc.
+        """
+        logger.info("Retrieving system config via WebSocket")
+        try:
+            return await self.call("get_config")
+        except Exception as e:
+            logger.error(f"Failed to retrieve system config: {e}")
+            raise
+
 
 
 async def get_lovelace_config_as_yaml(url: str, token: str) -> Optional[str]:

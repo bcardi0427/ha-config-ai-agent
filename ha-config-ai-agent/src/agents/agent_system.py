@@ -391,6 +391,17 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                         }
                     }
                 },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_system_info",
+                        "description": "Get Home Assistant system info like version, installed integrations, and time zone. Use this to check compatibility before proposing changes.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                },
                 propose_tool
             ]
 
@@ -657,6 +668,9 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                     elif function_name == "git_rollback":
                         result = await self.tools.git_rollback(**function_args)
                         logger.info(f"[ITERATION {iteration}] Tool result: Git rollback complete")
+                    elif function_name == "get_system_info":
+                        result = await self.tools.get_system_info(**function_args)
+                        logger.info(f"[ITERATION {iteration}] Tool result: System info retrieved")
                     else:
                         result = {"success": False, "error": f"Unknown tool: {function_name}"}
                         logger.error(f"[ITERATION {iteration}] Unknown tool requested: {function_name}")

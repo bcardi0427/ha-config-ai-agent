@@ -22,7 +22,7 @@ RUN chmod a+x ./run.sh
 
 # Labels for Home Assistant
 LABEL \
-    io.hass.version="0.7.1" \
+    io.hass.version="0.8.0" \
     io.hass.type="addon" \
     io.hass.arch="armhf|armv7|aarch64|i386|amd64"
 

@@ -64,6 +64,10 @@ The Agent can now "see" and "test" your Home Assistant instance directly:
 - **Auto-Recovery**: The agent can now revert the entire configuration directory to the last known working state if a change fails or causes errors.
 - **Audit Trail**: Every change can now be committed with a descriptive message, creating a clean history of AI-driven configuration changes.
 
+### 🌍 Environment Awareness
+- **`get_system_info` Tool**: The agent can now query your Home Assistant environment for the Core version, installed integrations, and system units.
+- **Context-Aware Recommendations**: This prevents the agent from suggesting YAML syntax or services that aren't compatible with your specific HA version or installed hardware.
+
 ---
 
-**Version:** 0.7.1
+**Version:** 0.8.0

@@ -46,5 +46,10 @@ We have added native Git tools to the agent to provide a professional DevOps-sty
 *   **git_commit**: Enables the agent to "save" successful changes with descriptive messages.
 *   **git_rollback**: A high-confidence recovery tool that can instantly revert the entire config directory to the last known working state if a reload fails or errors are detected in the logs.
 
+### 6. Environment Awareness
+Giving the agent "awareness" of its surroundings to prevent out-of-date or incompatible configuration suggestions.
+
+*   **get_system_info**: Retrieves Core version, integrations, and units. This ensures the AI doesn't hallucinate features that were deprecated in your version of HA or suggest services for integrations you haven't installed yet.
+
 ---
-**Current Version:** 0.7.1
+**Current Version:** 0.8.0
