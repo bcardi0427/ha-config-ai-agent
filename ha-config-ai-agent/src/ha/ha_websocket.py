@@ -394,6 +394,7 @@ class HomeAssistantWebSocket:
             result = await self.call("config/area_registry/update", **params)
             logger.info(f"Successfully updated area {area_id}")
             return result
+        except Exception as e:
             logger.error(f"Failed to update area: {e}")
             raise
 
