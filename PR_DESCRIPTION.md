@@ -47,4 +47,10 @@ The Agent can now "see" and "test" your Home Assistant instance directly:
 
 ---
 
-**Version:** 0.6.1
+### 📄 Documentation Upgrade
+
+- **Service Schema Awareness**: Updated the Agent's system prompt to explicitly inform it that `get_services` returns full field schemas (arguments, types, selectors). This "unlocks" the ability for the agent to validate its own service calls against the actual definitions in your specific Home Assistant instance.
+
+---
+
+**Version:** 0.6.2

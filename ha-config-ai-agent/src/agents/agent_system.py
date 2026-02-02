@@ -258,7 +258,7 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                     "type": "function",
                     "function": {
                         "name": "get_services",
-                        "description": "Get available services, optionally filtered by domain. Returns service names and descriptions. Useful for checking correct service calls.",
+                        "description": "Get available services, optionally filtered by domain. Returns full schema including required fields, argument types, and descriptions. ALWAYS use this to verify arguments (e.g. brightness_pct vs brightness) before writing automations.",
                         "parameters": {
                             "type": "object",
                             "properties": {
