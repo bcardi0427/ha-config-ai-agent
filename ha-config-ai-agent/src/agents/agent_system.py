@@ -200,6 +200,28 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
             # Add current user message
             messages.append({"role": "user", "content": user_message})
 
+            # Sanitize messages to remove orphaned tool responses (fixes 400 errors from bad history)
+            sanitized_messages = []
+            for msg in messages:
+                if msg.get("role") == "tool":
+                    if not sanitized_messages:
+                        logger.warning("Dropping orphaned tool message at start of conversation")
+                        continue
+                    prev = sanitized_messages[-1]
+                    if prev.get("role") == "assistant" and "tool_calls" in prev:
+                        # Check strictly if specific tool_call_id exists in previous message
+                        # This handles cases where multiple tools were called but history was truncated
+                        prev_tool_ids = [tc["id"] for tc in prev["tool_calls"]]
+                        if msg.get("tool_call_id") in prev_tool_ids:
+                            sanitized_messages.append(msg)
+                        else:
+                            logger.warning(f"Dropping tool message {msg.get('tool_call_id')}: ID not in previous assistant tool calls")
+                    else:
+                        logger.warning(f"Dropping orphaned tool message: Previous role was {prev.get('role')}")
+                else:
+                    sanitized_messages.append(msg)
+            messages = sanitized_messages
+
             # Define available tools for function calling with cache control
             # Mark tools for caching to reduce repeated processing
             propose_tool = {
