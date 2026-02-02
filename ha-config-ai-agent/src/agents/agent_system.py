@@ -705,6 +705,7 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                 accumulated_content = ""
                 accumulated_tool_calls = []
                 finish_reason = None
+                thought_signature = None
                 
                 # Stream from Gemini
                 async for event in self.gemini_client.generate_content_stream(messages, tools):
@@ -730,6 +731,7 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                     
                     elif event["type"] == "complete":
                         finish_reason = event.get("finish_reason", "stop")
+                        thought_signature = event.get("thought_signature")
                         usage = event.get("usage", {})
                         total_input_tokens += usage.get("prompt_tokens", 0)
                         total_output_tokens += usage.get("completion_tokens", 0)
@@ -743,6 +745,9 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                         "role": "assistant",
                         "content": accumulated_content
                     }
+                    if thought_signature:
+                        assistant_message["thought_signature"] = thought_signature
+                        
                     messages.append(assistant_message)
                     new_messages.append(assistant_message)
                     
