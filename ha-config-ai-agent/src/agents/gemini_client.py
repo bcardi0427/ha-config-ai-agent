@@ -1,27 +1,25 @@
-"""Native Gemini Client using the official google-genai SDK.
+"""Native Gemini API client for Gemini 3 and later models.
 
-This module leverages the official SDK to handle the complexities of
-Gemini 3's thought_signature and multi-step turn validation automatically.
+Implements the official Gemini 3 "Thinking" protocol via direct HTTP:
+1. Protocol: Server-Sent Events (SSE).
+2. Schema: 
+   - 'model' role allows 'functionCall' + 'thoughtSignature'.
+   - 'user' role is used for 'functionResponse'.
+3. Robustness: Strict parsing to prevent "undefined" UI errors.
 """
 
 import json
 import logging
-import os
+import aiohttp
 from typing import Any, AsyncIterator, Dict, List, Optional
-
-# Import the official SDK
-try:
-    from google import genai
-    from google.genai import types
-except ImportError:
-    # Fallback for environments where it's not installed yet
-    genai = None
 
 logger = logging.getLogger(__name__)
 
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
 
 class GeminiClient:
-    """Wrapper around google-genai SDK for OpenAI-style interaction."""
+    """Robust, native Gemini 3 client using aiohttp."""
 
     def __init__(
         self,
@@ -29,222 +27,238 @@ class GeminiClient:
         model: str = "gemini-3-flash-preview",
         temperature: Optional[float] = None,
     ):
-        if not genai:
-            raise ImportError("google-genai package is not installed")
-            
         self.api_key = api_key
-        # Clean model name for the SDK
+        # Clean model name (handle 'custom_app/gemini-3...' etc)
         self.model = model.split('/')[-1] if '/' in model else model
         self.temperature = temperature
+        self.endpoint = f"{GEMINI_API_BASE}/models/{self.model}:generateContent"
+        self.stream_endpoint = f"{GEMINI_API_BASE}/models/{self.model}:streamGenerateContent"
         
-        self.client = genai.Client(api_key=self.api_key)
-        logger.info(f"Initialized google-genai SDK client for {self.model}")
+        logger.info(f"Initialized native Gemini client for {self.model}")
 
-    def _convert_tools(self, tools: List[Dict]) -> Optional[List[Dict]]:
-        """Convert OpenAI tools to Gemini SDK tool definitions."""
-        if not tools:
-            return None
-            
-        declarations = []
-        for tool in tools:
+    def _build_tools(self, tool_definitions: List[Dict]) -> List[Dict]:
+        """Convert OpenAI tools to Gemini format."""
+        if not tool_definitions: return []
+        
+        function_declarations = []
+        for tool in tool_definitions:
             if tool.get("type") == "function":
-                f = tool["function"]
-                declarations.append(
-                    types.FunctionDeclaration(
-                        name=f["name"],
-                        description=f.get("description"),
-                        parameters=f.get("parameters")
-                    )
-                )
-        if not declarations:
-            return None
-            
-        return [types.Tool(function_declarations=declarations)]
+                func = tool["function"]
+                function_declarations.append({
+                    "name": func["name"],
+                    "description": func.get("description", ""),
+                    "parameters": func.get("parameters", {})
+                })
+        return [{"functionDeclarations": function_declarations}]
 
-    def _convert_messages(self, messages: List[Dict]) -> List[types.Content]:
-        """Convert OpenAI messages to Gemini SDK Content objects."""
-        contents = []
-        
-        for msg in messages:
-            role = msg.get("role")
-            if role == "system": continue # Handled in Config
-            
-            parts = []
-            
-            # 1. Text
-            if msg.get("content"):
-                if isinstance(msg["content"], str):
-                    parts.append(types.Part(text=msg["content"]))
-                elif isinstance(msg["content"], list):
-                     for item in msg["content"]:
-                         if isinstance(item, dict) and item.get("type") == "text":
-                             parts.append(types.Part(text=item.get("text")))
+    def _msg_to_parts(self, msg: Dict) -> List[Dict]:
+        """Convert message to Gemini parts with correct signature placement."""
+        parts = []
+        role = msg.get("role")
+        content = msg.get("content")
 
-            # 2. Tool Calls (Assistant)
-            if role == "assistant" and msg.get("tool_calls"):
-                for tc in msg["tool_calls"]:
-                    f = tc["function"]
-                    args = f.get("arguments", {})
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except: 
-                            args = {}
-                    
-                    # Create function call part
-                    fc_part = types.Part(
-                        function_call=types.FunctionCall(
-                            name=f["name"],
-                            args=args
-                        )
-                    )
-                    
-                    # Manual pass-through of thought_signature if we have it in history
-                    # The SDK usually handles this if we use Chat, but since we reconstruct
-                    # history each time, we check if we captured it previously.
-                    sig = tc.get("thought_signature") or tc.get("thoughtSignature")
-                    if sig:
-                        fc_part.thought_signature = sig
-                        
-                    parts.append(fc_part)
+        # 1. Text Parts
+        if content:
+            text_str = ""
+            if isinstance(content, str):
+                text_str = content
+            elif isinstance(content, list):
+                # Join text parts
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_str += item.get("text", "")
             
-            # 3. Tool Responses (Tool/User)
-            if role == "tool":
-                # OpenAI has 'tool_call_id', Gemini needs matching 'name'
-                # We assume the caller provides function_name or we parse it
-                name = msg.get("function_name")
-                if not name and msg.get("tool_call_id"):
-                     # Hack: we often store id as "funcname_idx"
-                     name = msg["tool_call_id"].split('_')[0]
-                
-                content_str = msg.get("content", "")
+            if text_str:
+                part = {"text": text_str}
+                # If assistant text, might have a signature sibling
+                if role == "assistant":
+                    sig = msg.get("thought_signature") or msg.get("thoughtSignature")
+                    if sig: part["thoughtSignature"] = sig
+                parts.append(part)
+
+        # 2. Function Calls (Model Role)
+        if role == "assistant" and "tool_calls" in msg:
+            for tc in msg.get("tool_calls", []):
+                func = tc.get("function", {})
+                args = {}
                 try:
-                    response_dict = json.loads(content_str) if isinstance(content_str, str) else content_str
+                    args_str = func.get("arguments", "{}")
+                    if isinstance(args_str, str):
+                        args = json.loads(args_str)
+                    else:
+                        args = args_str
                 except:
-                    response_dict = {"result": content_str}
+                    pass
 
-                parts.append(types.Part(
-                    function_response=types.FunctionResponse(
-                        name=name,
-                        response=response_dict
-                    )
-                ))
-            
-            if parts:
-                # Map roles: assistant -> model, tool/user -> user
-                sdk_role = "model" if role == "assistant" else "user"
+                part = {
+                    "functionCall": {
+                        "name": func.get("name", ""),
+                        "args": args
+                    }
+                }
                 
-                # Check for message-level signature (text reasoning)
-                content_obj = types.Content(role=sdk_role, parts=parts)
-                sig = msg.get("thought_signature") or msg.get("thoughtSignature")
-                if sig and sdk_role == "model":
-                    content_obj.thought_signature = sig
-                    
-                contents.append(content_obj)
+                # Check for signature on the tool call or valid global signature
+                sig = tc.get("thought_signature") or tc.get("thoughtSignature")
+                # Fallback: if message has signature and this is the first tool call
+                if not sig:
+                     sig = msg.get("thought_signature") or msg.get("thoughtSignature")
+                
+                if sig:
+                    part["thoughtSignature"] = sig
+                
+                parts.append(part)
 
-        return contents
+        # 3. Function Responses (User Role)
+        if role == "tool":
+            func_name = msg.get("function_name")
+            if not func_name:
+                # Try to extract from ID if name missing
+                tool_call_id = msg.get("tool_call_id", "")
+                if "_" in tool_call_id:
+                     func_name = tool_call_id.split("_")[0]
+                else:
+                     func_name = tool_call_id
+
+            response_payload = {"result": str(content)}
+            try:
+                if isinstance(content, str):
+                    parsed = json.loads(content)
+                    if isinstance(parsed, (dict, list)):
+                        response_payload = parsed
+                elif isinstance(content, (dict, list)):
+                    response_payload = content
+            except:
+                pass
+
+            parts.append({
+                "functionResponse": {
+                    "name": func_name,
+                    "response": response_payload
+                }
+            })
+
+        return parts
 
     async def generate_content_stream(
         self,
         messages: List[Dict],
         tools: List[Dict],
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Stream content using the SDK."""
+        """Reliable streaming."""
         try:
-            sdk_contents = self._convert_messages(messages)
-            sdk_tools = self._convert_tools(tools)
+            # Group Content
+            contents = []
+            for msg in messages:
+                role = msg.get("role", "user")
+                if role == "system": continue
+                
+                # Role map: assistant -> model, others -> user
+                g_role = "model" if role == "assistant" else "user"
+                
+                new_parts = self._msg_to_parts(msg)
+                if not new_parts: continue
+
+                # Merge identical adjacent roles
+                if contents and contents[-1]["role"] == g_role:
+                    contents[-1]["parts"].extend(new_parts)
+                else:
+                    contents.append({"role": g_role, "parts": new_parts})
+
+            request_body = {
+                "contents": contents,
+                "tools": self._build_tools(tools)
+            }
             
-            # System instruction
-            system_instr = None
+            # System Instruction
             for msg in messages:
                 if msg.get("role") == "system":
-                    system_instr = msg.get("content")
+                    request_body["systemInstruction"] = {"parts": [{"text": msg.get("content", " ")}]}
                     break
 
-            config = types.GenerateContentConfig(
-                temperature=self.temperature,
-                tools=sdk_tools,
-                system_instruction=system_instr
-            )
-            
-            logger.debug(f"[GEMINI SDK] Sending {len(sdk_contents)} history items")
-            
-            # Use models.generate_content_stream (async version via automatic wrapping?)
-            # The v1.2.0 SDK has async methods on the client if using aio
-            # or we might be using the synchronous wrapper.
-            # However, for safety in this specific HA environment, we'll try the common
-            # async iteration pattern if the client supports it, otherwise we might block briefly.
-            # UPDATE: google-genai SDK 1.0+ 's generate_content_stream returns an iterator.
-            # To be async-safe in HA, we technically should run this in executor if it's blocking,
-            # but let's assume standard usage for now.
-            
-            # IMPORTANT: We use the client.models.generate_content_stream 
-            response_stream = self.client.models.generate_content_stream(
-                model=self.model,
-                contents=sdk_contents,
-                config=config
-            )
-            
-            accum_tool_calls = []
-            msg_sig = None
-            accum_text = ""
-            
-            for chunk in response_stream:
-                # Chunk is a GenerateContentResponse
-                # It might contain candidates[0].content...
-                
-                # Capture signature
-                if not msg_sig and chunk.candidates and chunk.candidates[0].content:
-                    msg_sig = getattr(chunk.candidates[0].content, 'thought_signature', None)
+            if self.temperature is not None:
+                request_body["generationConfig"] = {"temperature": self.temperature}
 
-                # Process parts
-                if chunk.text:
-                    accum_text += chunk.text
-                    yield {"type": "content", "content": chunk.text}
-                
-                if chunk.function_calls:
-                    for fc in chunk.function_calls:
-                        # Capture signature from part if present
-                        # SDK objects might allow access via attribute or dict
-                        # We'll check the source part if accessible, or just rely on the msg_sig
+            url = f"{self.stream_endpoint}?key={self.api_key}&alt=sse"
+            
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=request_body) as response:
+                    if response.status != 200:
+                        err_text = await response.text()
+                        logger.error(f"[GEMINI] API Error {response.status}: {err_text}")
+                        yield {"type": "error", "error": f"Gemini Error {response.status}: {err_text}"}
+                        return
+
+                    accum_text = ""
+                    accum_tool_calls = []
+                    msg_sig = None
+                    
+                    async for line in response.content:
+                        line = line.decode('utf-8').strip()
+                        if not line.startswith('data: '): continue
                         
-                        tc = {
-                            "id": f"{fc.name}_{len(accum_tool_calls)}",
-                            "type": "function",
-                            "function": {
-                                "name": fc.name,
-                                "arguments": json.dumps(fc.args)
-                            }
-                        }
-                        # If the chunk has a signature, attach it
-                        if msg_sig:
-                            tc["thought_signature"] = msg_sig
+                        try:
+                            json_str = line[6:]
+                            if not json_str or json_str == '[DONE]': continue
                             
-                        # Try to find signature on the specific part if possible (undocumented in SDK wrapper sometimes)
-                        
-                        accum_tool_calls.append(tc)
-                        yield {"type": "tool_call", "tool_call": tc}
-                
-                if chunk.candidates and chunk.candidates[0].finish_reason:
-                     # Stop reason logic if needed
-                     pass
-
-            # Final yield
-            yield {
-                "type": "complete",
-                "content": accum_text,
-                "tool_calls": accum_tool_calls,
-                "thought_signature": msg_sig,
-                "usage": {}, # Usage often at end
-                "finish_reason": "tool_calls" if accum_tool_calls else "stop"
-            }
+                            chunk = json.loads(json_str)
+                            candidates = chunk.get("candidates", [])
+                            if not candidates: continue
+                            
+                            cand = candidates[0]
+                            content_obj = cand.get("content", {})
+                            parts = content_obj.get("parts", [])
+                            
+                            # Scan parts
+                            for part in parts:
+                                # Safe get signature
+                                sig = part.get("thoughtSignature") or part.get("thought_signature")
+                                if sig: msg_sig = sig
+                                
+                                # Safe get text
+                                if "text" in part:
+                                    t = part["text"]
+                                    if t: # ONLY yield if string is not empty
+                                        accum_text += t
+                                        yield {"type": "content", "content": t}
+                                
+                                # Safe get function call
+                                if "functionCall" in part:
+                                    fc = part["functionCall"]
+                                    tc = {
+                                        "id": f"{fc['name']}_{len(accum_tool_calls)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": fc["name"],
+                                            "arguments": json.dumps(fc.get("args", {}))
+                                        }
+                                    }
+                                    # Attach signature if found
+                                    if sig: tc["thought_signature"] = sig
+                                    elif msg_sig: tc["thought_signature"] = msg_sig
+                                    
+                                    accum_tool_calls.append(tc)
+                                    yield {"type": "tool_call", "tool_call": tc}
+                                    
+                        except Exception as e:
+                            logger.debug(f"Chunk parsing warning: {e}")
+                            continue
+                            
+                    # Finished stream
+                    yield {
+                        "type": "complete",
+                        "content": accum_text,
+                        "tool_calls": accum_tool_calls,
+                        "thought_signature": msg_sig,
+                        "usage": {"total_tokens": 0}, # Usage optional
+                        "finish_reason": "tool_calls" if accum_tool_calls else "stop"
+                    }
 
         except Exception as e:
-            logger.error(f"[GEMINI SDK] Error: {e}", exc_info=True)
+            logger.error(f"[GEMINI] Exception: {e}", exc_info=True)
             yield {"type": "error", "error": str(e)}
 
     async def generate_content(self, messages: List[Dict], tools: List[Dict]) -> Dict[str, Any]:
-        """Non-streaming helper."""
         result = {"content": "", "tool_calls": [], "usage": {}}
         async for event in self.generate_content_stream(messages, tools):
             if event["type"] == "content": result["content"] += event["content"]

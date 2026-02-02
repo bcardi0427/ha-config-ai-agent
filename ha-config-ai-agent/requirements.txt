@@ -7,8 +7,7 @@ jinja2==3.1.6
 openai-agents==0.4.2
 openai==2.6.1
 
-# Google Gen AI SDK (Official)
-google-genai==1.2.0
+# Native Gemini 3+ API uses aiohttp (already included below)
 
 # Configuration management
 ruamel.yaml==0.18.16
