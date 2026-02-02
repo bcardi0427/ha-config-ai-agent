@@ -170,8 +170,10 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
         Returns:
             True if Gemini 3 or later
         """
+        # Handle both "gemini-3-..." and "google/gemini-3-..." formats
+        model_part = model.split('/')[-1] if '/' in model else model
         gemini_3_prefixes = ["gemini-3", "gemini-4", "gemini-5"]
-        return any(model.startswith(prefix) for prefix in gemini_3_prefixes)
+        return any(model_part.startswith(prefix) for prefix in gemini_3_prefixes)
 
     async def chat_stream(
         self,
@@ -741,6 +743,11 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                 
                 # No tool calls - we're done
                 if not accumulated_tool_calls:
+                    # HA validation requires non-empty content for assistant messages
+                    if not accumulated_content:
+                        accumulated_content = "Task processed. How else can I help?"
+                        logger.debug("[GEMINI] Added fallback content for empty response")
+
                     assistant_message = {
                         "role": "assistant",
                         "content": accumulated_content

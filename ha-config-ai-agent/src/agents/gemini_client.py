@@ -206,11 +206,14 @@ class GeminiClient:
                                     # Capture signatures from ANY part
                                     # Gemini uses 'thoughtSignature' (camelCase) in native API
                                     sig = part.get("thoughtSignature") or part.get("thought_signature")
+                                    if sig:
+                                        msg_thought_sig = sig
+                                        logger.debug(f"[GEMINI] Captured thoughtSignature: {sig[:20]}...")
                                     
                                     if "text" in part:
-                                        if sig: msg_thought_sig = sig
-                                        accum_text += part["text"]
-                                        yield {"type": "content", "content": part["text"]}
+                                        text = part["text"]
+                                        accum_text += text
+                                        yield {"type": "content", "content": text}
                                     
                                     if "functionCall" in part:
                                         fc = part["functionCall"]
@@ -262,8 +265,10 @@ class GeminiClient:
 
 
 def is_gemini_model(model: str) -> bool:
-    return model.startswith("gemini-")
+    model_part = model.split('/')[-1] if '/' in model else model
+    return model_part.startswith("gemini-")
 
 
 def is_gemini_3_model(model: str) -> bool:
-    return any(model.startswith(p) for p in ["gemini-3", "gemini-4"])
+    model_part = model.split('/')[-1] if '/' in model else model
+    return any(model_part.startswith(p) for p in ["gemini-3", "gemini-4", "gemini-5"])
