@@ -13,7 +13,7 @@ import json as json_lib
 from .config import ConfigurationManager
 from .agents import AgentSystem
 
-version = "0.9.3"
+version = "0.9.4"
 
 # Configure logging
 log_level = os.getenv('LOG_LEVEL', 'info').upper()
@@ -143,8 +143,26 @@ async def strip_double_slash_middleware(request: Request, call_next):
     return response
 
 # Mount static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Calculate absolute path to the directory containing this file (src/)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to the integration root (ai_config_agent/)
+root_dir = os.path.dirname(current_dir)
+
+static_dir = os.path.join(root_dir, "static")
+templates_dir = os.path.join(root_dir, "templates")
+
+# Ensure directories exist before mounting to avoid errors
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+else:
+    logger.warning(f"Static directory not found at {static_dir}")
+
+if os.path.exists(templates_dir):
+    templates = Jinja2Templates(directory=templates_dir)
+else:
+    logger.warning(f"Templates directory not found at {templates_dir}")
+    # Fallback or empty templates to prevent crash on import
+    templates = Jinja2Templates(directory="templates")
 
 # Function to set hass instance (called from custom component __init__.py)
 def set_hass_instance(hass):
