@@ -143,6 +143,44 @@ class AiConfigAgentPanel extends HTMLElement {
         }));
     }
 
+    _exportHtml() {
+        const chatContent = this.shadowRoot.getElementById('chat-output').innerHTML;
+        const styles = this.shadowRoot.querySelector('style').outerHTML;
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AI Agent Conversation Export</title>
+    ${styles}
+    <style>
+        body { margin: 0; padding: 0; background: var(--primary-background-color); }
+        .container { max-width: 800px; margin: 0 auto; min-height: 100vh; }
+        #chat-output { overflow: visible !important; height: auto !important; }
+        /* Hide buttons in export */
+        button { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>Conversation Export - ${new Date().toLocaleString()}</header>
+        <div id="chat-output">
+            ${chatContent}
+        </div>
+    </div>
+</body>
+</html>`;
+
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ha-agent-chat-${new Date().toISOString().slice(0, 10)}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     _render() {
         this.shadowRoot.innerHTML = `
       <style>
@@ -167,6 +205,15 @@ class AiConfigAgentPanel extends HTMLElement {
           color: var(--app-header-text-color, white);
           font-size: 20px;
           font-weight: 500;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        header button {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.3);
+            font-size: 14px;
+            padding: 4px 12px;
         }
         #chat-output {
           flex: 1;
@@ -223,10 +270,11 @@ class AiConfigAgentPanel extends HTMLElement {
       </style>
       <div class="container">
         <header>
-            AI Configuration Agent
+            <span>AI Configuration Agent</span>
+            <button id="export-btn" title="Download Conversation">💾 Save Chat</button>
         </header>
         <div id="chat-output">
-             <div class="message system">Connected to Home Assistant AI Agent v0.9.0</div>
+             <div class="message system">Connected to Home Assistant AI Agent v0.9.1</div>
         </div>
         <div id="input-area">
           <input type="text" id="chat-input" placeholder="Ask me to configure something..." autocomplete="off">
@@ -237,6 +285,7 @@ class AiConfigAgentPanel extends HTMLElement {
 
         const input = this.shadowRoot.getElementById('chat-input');
         const btn = this.shadowRoot.getElementById('send-btn');
+        const exportBtn = this.shadowRoot.getElementById('export-btn');
 
         const sendMessage = () => {
             const text = input.value.trim();
@@ -247,6 +296,8 @@ class AiConfigAgentPanel extends HTMLElement {
         };
 
         btn.addEventListener('click', sendMessage);
+        exportBtn.addEventListener('click', () => this._exportHtml());
+
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
