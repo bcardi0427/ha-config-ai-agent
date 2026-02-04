@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,13 +11,14 @@
     <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/diff2html@3.4.47/bundles/js/diff2html-ui.min.js"></script>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1><img src="static/images/icon.png" width="64" height="64"/> AI Configuration Agent</h1>
+            <h1><img src="static/images/icon.png" width="64" height="64" /> AI Configuration Agent</h1>
             <div class="header-actions">
-                <button id="importBtn" class="btn btn-icon" title="Import Conversation">📥</button>
-                <button id="exportBtn" class="btn btn-icon" title="Export Conversation">📤</button>
+                <button id="importBtn" class="btn" title="Import Conversation">Import</button>
+                <button id="exportBtn" class="btn btn-primary" title="Save Chat as HTML/PDF">💾 Save Chat</button>
                 <span class="version-badge">{{ version }}</span>
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display: none;">
@@ -49,12 +51,8 @@
 
                 <!-- Input Area -->
                 <div class="chat-input-area">
-                    <textarea
-                        id="messageInput"
-                        class="chat-input"
-                        placeholder="Ask me anything about your Home Assistant configuration..."
-                        rows="3"
-                    ></textarea>
+                    <textarea id="messageInput" class="chat-input"
+                        placeholder="Ask me anything about your Home Assistant configuration..." rows="3"></textarea>
                     <button id="sendBtn" class="btn btn-primary">Send</button>
                 </div>
 
@@ -68,7 +66,8 @@
                 <span class="token-counter-breakdown">
                     <span class="token-counter-input" id="tokenCounterInput" title="Input tokens">↓0</span>
                     <span class="token-counter-output" id="tokenCounterOutput" title="Output tokens">↑0</span>
-                    <span class="token-counter-cached" id="tokenCounterCached" title="Cached tokens" style="display: none;">💾0</span>
+                    <span class="token-counter-cached" id="tokenCounterCached" title="Cached tokens"
+                        style="display: none;">💾0</span>
                 </span>
             </div>
         </footer>
@@ -86,4 +85,5 @@
         }
     </script>
 </body>
+
 </html>

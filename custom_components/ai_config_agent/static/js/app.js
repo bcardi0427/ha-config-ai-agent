@@ -565,7 +565,7 @@ function addToolCallMessage(toolCalls) {
 }
 
 // Toggle tool call details
-window.toggleToolCall = function(toolCallId) {
+window.toggleToolCall = function (toolCallId) {
     const detailsDiv = document.getElementById(toolCallId);
     const button = detailsDiv.previousElementSibling.querySelector('.tool-call-toggle');
 
@@ -621,7 +621,7 @@ function addToolResultMessage(functionName, result) {
 }
 
 // Toggle tool result details
-window.toggleToolResult = function(resultId) {
+window.toggleToolResult = function (resultId) {
     const detailsDiv = document.getElementById(resultId);
     const button = detailsDiv.previousElementSibling.querySelector('.tool-result-toggle');
 
@@ -690,7 +690,7 @@ function addApprovalCard(changesetData) {
 }
 
 // View changes in modal
-window.viewChanges = function(changesetId) {
+window.viewChanges = function (changesetId) {
     // Find the approval card with this changeset ID
     const cards = document.querySelectorAll('.approval-card-message');
     let changesetData = null;
@@ -825,13 +825,13 @@ function generateDiffHtml(oldContent, newContent, fileName) {
 }
 
 // Close diff modal
-window.closeDiffModal = function() {
+window.closeDiffModal = function () {
     diffModal.style.display = 'none';
     currentChangesetData = null;
 };
 
 // Approve pending changes
-window.approvePendingChanges = async function() {
+window.approvePendingChanges = async function () {
     if (!currentChangesetData) return;
 
     // Get the buttons from modal-footer
@@ -899,7 +899,7 @@ window.approvePendingChanges = async function() {
 };
 
 // Reject pending changes
-window.rejectPendingChanges = async function() {
+window.rejectPendingChanges = async function () {
     if (!currentChangesetData) return;
 
     // Get the buttons from modal-footer
@@ -1029,33 +1029,62 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Export conversation to JSON file
+// Export conversation to HTML file (Standalone)
 function exportConversation() {
     if (conversationHistory.length === 0) {
         addSystemMessage('⚠️ No conversation to export.');
         return;
     }
 
-    const exportData = {
-        version: '1.0',
-        timestamp: new Date().toISOString(),
-        conversationHistory: conversationHistory,
-        messageCount: conversationHistory.length
-    };
+    const chatContent = document.getElementById('chatMessages').innerHTML;
+    // Get all stylesheets
+    let styles = '';
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(s => {
+        styles += s.outerHTML;
+    });
 
-    const jsonString = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AI Agent Conversation Export</title>
+    ${styles}
+    <style>
+        body { margin: 0; padding: 20px; background: #1c1c1c; color: #e1e1e1; font-family: system-ui, sans-serif; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .chat-messages { overflow: visible !important; height: auto !important; }
+        /* Hide buttons in export */
+        button, .header-actions { display: none !important; }
+        .message { margin-bottom: 12px; padding: 12px; border-radius: 8px; }
+        .user-message { background: #03a9f4; color: white; align-self: flex-end; margin-left: 20%; }
+        .assistant-message { background: #2c2c2c; align-self: flex-start; margin-right: 20%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header style="margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+            <h2>AI Agent Conversation Export</h2>
+             <p>${new Date().toLocaleString()}</p>
+        </header>
+        <div class="chat-messages">
+            ${chatContent}
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ha-config-agent-conversation-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `ha-agent-chat-${new Date().toISOString().slice(0, 10)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    addSystemMessage('✅ Conversation exported successfully.');
+    addSystemMessage('✅ Conversation saved as HTML. You can print it to PDF from your browser.');
 }
 
 // Import conversation from JSON file
@@ -1064,7 +1093,7 @@ function importConversation(event) {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         try {
             const importData = JSON.parse(e.target.result);
 
@@ -1110,7 +1139,7 @@ function importConversation(event) {
         }
     };
 
-    reader.onerror = function() {
+    reader.onerror = function () {
         addSystemMessage('❌ Failed to read file.');
         event.target.value = '';
     };
