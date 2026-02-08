@@ -13,7 +13,7 @@ import json as json_lib
 from .config import ConfigurationManager
 from .agents import AgentSystem
 
-version = "0.9.10"
+version = "0.9.11"
 
 # Configure logging
 log_level = os.getenv('LOG_LEVEL', 'info').upper()

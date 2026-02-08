@@ -56,14 +56,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagePreview = document.getElementById('imagePreview');
     const removeImageBtn = document.getElementById('removeImageBtn');
 
-    if (attachBtn && imageInput) {
-        attachBtn.addEventListener('click', () => imageInput.click());
+    console.log('Image upload elements:', { attachBtn, imageInput, imagePreviewContainer, imagePreview, removeImageBtn });
 
-        imageInput.addEventListener('change', (e) => {
+    if (attachBtn && imageInput) {
+        attachBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Attach button clicked, triggering file input');
+            imageInput.click();
+        });
+
+        imageInput.addEventListener('change', function (e) {
+            console.log('File input changed:', e.target.files);
             const file = e.target.files[0];
             if (file && file.type.startsWith('image/')) {
+                console.log('Reading image file:', file.name);
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = function (event) {
+                    console.log('Image loaded, data URL length:', event.target.result.length);
                     window.currentImageData = event.target.result;
                     imagePreview.src = event.target.result;
                     imagePreviewContainer.style.display = 'flex';
@@ -72,9 +82,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        removeImageBtn.addEventListener('click', () => {
-            window.clearImage();
-        });
+        if (removeImageBtn) {
+            removeImageBtn.addEventListener('click', function () {
+                window.clearImage();
+            });
+        }
+    } else {
+        console.error('Image upload elements not found:', { attachBtn, imageInput });
     }
 
     // Check health
