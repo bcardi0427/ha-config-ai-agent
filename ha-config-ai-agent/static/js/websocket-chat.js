@@ -84,8 +84,14 @@ async function sendMessageWebSocket() {
         ws.send(JSON.stringify({
             type: 'chat',
             message: message,
-            conversation_history: conversationHistory.slice(0, -1)
+            conversation_history: conversationHistory.slice(0, -1),
+            image_data: window.currentImageData
         }));
+
+        // Clear the image after sending
+        if (window.clearImage) {
+            window.clearImage();
+        }
 
     } catch (error) {
         console.error('WebSocket send error:', error);

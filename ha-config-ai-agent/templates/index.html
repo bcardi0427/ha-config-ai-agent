@@ -52,9 +52,20 @@
 
                 <!-- Input Area -->
                 <div class="chat-input-area">
-                    <textarea id="messageInput" class="chat-input"
-                        placeholder="Ask me anything about your Home Assistant configuration..." rows="3"></textarea>
-                    <button id="sendBtn" class="btn btn-primary">Send</button>
+                    <div id="imagePreviewContainer" class="image-preview" style="display: none;">
+                        <div class="preview-wrapper">
+                            <img id="imagePreview" src="" alt="Preview">
+                            <button id="removeImageBtn" class="remove-image-btn" title="Remove image">×</button>
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <button id="attachBtn" class="btn btn-icon" title="Upload Image">📎</button>
+                        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                        <textarea id="messageInput" class="chat-input"
+                            placeholder="Ask me anything about your Home Assistant configuration..."
+                            rows="3"></textarea>
+                        <button id="sendBtn" class="btn btn-primary">Send</button>
+                    </div>
                 </div>
 
             </div>

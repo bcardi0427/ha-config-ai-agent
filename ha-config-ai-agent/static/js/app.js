@@ -49,9 +49,52 @@ document.addEventListener('DOMContentLoaded', () => {
     importBtn.addEventListener('click', () => importFileInput.click());
     importFileInput.addEventListener('change', importConversation);
 
+    // Image upload listeners
+    const attachBtn = document.getElementById('attachBtn');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+    const removeImageBtn = document.getElementById('removeImageBtn');
+
+    if (attachBtn && imageInput) {
+        attachBtn.addEventListener('click', () => imageInput.click());
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    window.currentImageData = event.target.result;
+                    imagePreview.src = event.target.result;
+                    imagePreviewContainer.style.display = 'flex';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        removeImageBtn.addEventListener('click', () => {
+            window.clearImage();
+        });
+    }
+
     // Check health
     checkHealth();
 });
+
+// Clear image preview and data
+window.clearImage = function () {
+    const imageInput = document.getElementById('imageInput');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+
+    window.currentImageData = null;
+    if (imageInput) imageInput.value = '';
+    if (imagePreview) imagePreview.src = '';
+    if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+};
+
+// Global variable for image data
+window.currentImageData = null;
 
 // Check health endpoint
 async function checkHealth() {
