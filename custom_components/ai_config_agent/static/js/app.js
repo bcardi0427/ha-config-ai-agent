@@ -35,6 +35,57 @@ document.addEventListener('DOMContentLoaded', () => {
     tokenCounterOutput = document.getElementById('tokenCounterOutput');
     tokenCounterCached = document.getElementById('tokenCounterCached');
 
+    // Image Upload Elements
+    const attachBtn = document.getElementById('attachBtn');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+    const removeImageBtn = document.getElementById('removeImageBtn');
+
+    // Global image data
+    window.currentImageData = null;
+
+    // Attach button handler
+    if (attachBtn) {
+        attachBtn.addEventListener('click', () => {
+            imageInput.click();
+        });
+    }
+
+    // File input handler
+    if (imageInput) {
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                addSystemMessage('❌ Please select an image file.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                window.currentImageData = e.target.result;
+                imagePreview.src = window.currentImageData;
+                imagePreviewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Remove image handler
+    if (removeImageBtn) {
+        removeImageBtn.addEventListener('click', clearImage);
+    }
+
+    // Clear image function
+    window.clearImage = function () {
+        window.currentImageData = null;
+        imageInput.value = '';
+        imagePreview.src = '';
+        imagePreviewContainer.style.display = 'none';
+    };
+
     // Set up event listeners
     sendBtn.addEventListener('click', sendMessage);
     messageInput.addEventListener('keypress', (e) => {

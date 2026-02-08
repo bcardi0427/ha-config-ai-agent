@@ -162,7 +162,8 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
     async def chat_stream(
         self,
         user_message: str,
-        conversation_history: Optional[List[Dict[str, Any]]] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        image_data: Optional[str] = None
     ):
         """
         Process a user message and stream response events in real-time.
@@ -224,7 +225,19 @@ Remember: You're helping manage a production Home Assistant system. Safety and c
                 history_length += len(conversation_history)
 
             # Add current user message
-            messages.append({"role": "user", "content": user_message})
+            if image_data:
+                content = [
+                    {"type": "text", "text": user_message},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_data
+                        }
+                    }
+                ]
+                messages.append({"role": "user", "content": content})
+            else:
+                messages.append({"role": "user", "content": user_message})
 
             # Sanitize messages to remove orphaned tool responses (fixes 400 errors from bad history)
             sanitized_messages = []
