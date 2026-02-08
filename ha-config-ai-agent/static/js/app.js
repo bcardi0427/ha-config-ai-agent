@@ -59,12 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Image upload elements:', { attachBtn, imageInput, imagePreviewContainer, imagePreview, removeImageBtn });
 
     if (attachBtn && imageInput) {
-        attachBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('Attach button clicked, triggering file input');
-            imageInput.click();
-        });
+        // Label with for="imageInput" handles the click natively in all browsers
+        console.log('Attach handler ready (Native Label Mode)');
 
         imageInput.addEventListener('change', function (e) {
             console.log('File input changed:', e.target.files);
