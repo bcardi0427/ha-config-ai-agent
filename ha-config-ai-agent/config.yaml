@@ -2,7 +2,7 @@ name: "AIassistant"
 version: "0.9.14"
 slug: "aiassistant"
 description: "AI-powered Home Assistant configuration assistant with approval workflow"
-url: "https://github.com/yinzara/ha-config-ai-agent"
+url: "https://github.com/bcardi0427/AIassistant"
 arch:
   - aarch64
   - i386

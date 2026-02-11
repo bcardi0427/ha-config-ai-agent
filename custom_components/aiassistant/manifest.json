@@ -9,10 +9,10 @@
     "lovelace",
     "http"
   ],
-  "documentation": "https://github.com/yinzara/ha-config-ai-agent",
+  "documentation": "https://github.com/bcardi0427/AIassistant",
   "integration_type": "system",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/yinzara/ha-config-ai-agent/issues",
+  "issue_tracker": "https://github.com/bcardi0427/AIassistant/issues",
   "requirements": [
     "fastapi==0.109.0",
     "uvicorn[standard]==0.27.0",

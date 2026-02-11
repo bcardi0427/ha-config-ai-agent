@@ -13,7 +13,7 @@ labels:
   io.hass.description: "AI-powered Home Assistant configuration assistant"
   org.opencontainers.image.title: "AIassistant"
   org.opencontainers.image.description: "AI-powered Home Assistant configuration management"
-  org.opencontainers.image.source: "https://github.com/yinzara/ha-config-ai-agent"
+  org.opencontainers.image.source: "https://github.com/bcardi0427/AIassistant"
   org.opencontainers.image.licenses: "MIT"
 
 args:

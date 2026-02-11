@@ -53,7 +53,7 @@ The AIassistant can be installed as a local Home Assistant add-on.
 
 3. **Clone the repository**
    ```bash
-   git clone https://github.com/yinzara/ha-config-ai-agent.git
+   git clone https://github.com/bcardi0427/AIassistant.git
    ```
 
 4. **Add the local repository in Home Assistant**
@@ -86,8 +86,8 @@ For development and testing outside of Home Assistant:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yinzara/ha-config-ai-agent.git
-cd ha-config-ai-agent/ha-config-ai-agent
+git clone https://github.com/bcardi0427/AIassistant.git
+cd AIassistant/ha-config-ai-agent
 
 # Create virtual environment
 python3 -m venv .venv

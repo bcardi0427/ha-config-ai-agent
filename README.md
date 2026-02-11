@@ -26,7 +26,7 @@ An AI-powered Home Assistant configuration assistant with approval workflow.
 1. **Add to HACS:**
    - Open HACS → Integrations
    - Click ⋮ → Custom repositories
-   - Add: `https://github.com/yinzara/ha-config-ai-agent`
+   - Add: `https://github.com/bcardi0427/AIassistant`
    - Category: Integration
 
 2. **Install:**
@@ -44,7 +44,7 @@ An AI-powered Home Assistant configuration assistant with approval workflow.
 
 1. Navigate to Settings → Add-ons → Add-on Store
 2. Click ⋮ → Repositories
-3. Add: `https://github.com/yinzara/ha-config-ai-agent`
+3. Add: `https://github.com/bcardi0427/AIassistant`
 4. Find "AIassistant" and click Install
 5. Configure:
    - **Provider:** Select your AI provider
